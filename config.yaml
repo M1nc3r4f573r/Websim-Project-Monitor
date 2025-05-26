@@ -1,10 +1,29 @@
-#Project ID to monitor
-project_id: "<your project ID>"
-#Base URL for websim
+#Project ID to monitor, required
+project_id: "<Configure your project ID and cookies in config.yaml>"
+
+#Interval,recommended ~10s
+interval: 10
+
+#Base URL for websim, required if you don't want to have requests sent to localhost
 base_url: "https://websim.com"
-#Model ID
+
+#Model ID, a free model is recommended
 model_id: "gemini-flash"
+
 #Additional Notes, Usually for safety
 additional_note: "Don't spread the cheese touch"
-#Cookies, paste from browser with document.cookies
-cookies: "sb-hello-auth-token.0=base64-ABCDEF1919810,sb-hello-auth-token.0=114514"
+
+#Cookies, paste from browser with document.cookies, required to work
+cookies: "sb-hello-auth-token.0=base64-ABCDEF1919810,sb-hello-auth-token.1=114514"
+
+#Automatic Reponse prefix is checked for if a comment requires processing.
+auto_response_prefix: "[AUTOMATIC RESPONSE] "
+
+#Automatic Response When A Revision is created, auto_response_prefix is automatically prepended.
+auto_response_create_revision: "Revision Created."
+
+#Automatic Response When the comment author didn't like the project when it is required
+auto_response_require_likes: "You need to like this project to be able to make an edit."
+
+#Optional, Require likes toggle, defaults to no
+require_like_project: no
