@@ -1,0 +1,10 @@
+#Project ID to monitor
+project_id: "<your project ID>"
+#Base URL for websim
+base_url: "https://websim.com"
+#Model ID
+model_id: "gemini-flash"
+#Additional Notes, Usually for safety
+additional_note: "Don't spread the cheese touch"
+#Cookies, paste from browser with document.cookies
+cookies: "sb-hello-auth-token.0=base64-ABCDEF1919810,sb-hello-auth-token.0=114514"
