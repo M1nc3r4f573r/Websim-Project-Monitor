@@ -98,7 +98,7 @@ async def check_and_respond(project_id:str,config:dict):
             # Step 4: Check if author has liked the project if required
             # Going through the pages is usually not required
             if require_like_project:
-                url_likes = f"{base_url}/api/v1/users/{author['username']}/likes"
+                url_likes = f"{base_url}/api/v1/users/{author['username']}/likes?first=100"
                 async with session.get(url_likes) as resp:
                     if resp.status != 200:
                         logger.error(f"Fetch likes failed: {resp.status}, Body: {await resp.text()}")
@@ -143,7 +143,7 @@ async def check_and_respond(project_id:str,config:dict):
             logger.info("[Monitor] Confirmation comment posted.")
 
     except Exception as e:
-        logger.error(f"[Monitor] Error: {e}")
+        logger.error(f"[Monitor] Error: {e}",exc_info=True)
 
 
 def monitor_project(config: dict, *, interval_sec: int = 10, **kwargs):
