@@ -2,26 +2,21 @@ import asyncio
 import logging
 from typing import Optional, Dict
 import aiohttp
-import yaml
-import os
-from http.cookies import SimpleCookie
 
 from project_revision import process_project_revision
+
+from cookie_manager import refresh_cookies, is_jwt_expired
+
+from config_manager import load_config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("monitor")
 
-def load_config(config_path: str = "config.yaml") -> Dict:
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-    if 'cookies' in config and isinstance(config['cookies'], str):
-        cookie = SimpleCookie()
-        cookie.load(config['cookies'])
-        config['cookies'] = {k: v.value for k, v in cookie.items()}
-    return config
 
+async def refresh_and_update_cookies(url,cookies):
+    new_cookies = await refresh_cookies(url, cookies)
+    if new_cookies:
+        cookies.update(new_cookies)
 
 async def check_and_respond(project_id:str,config:dict):
     try:
@@ -48,31 +43,54 @@ async def check_and_respond(project_id:str,config:dict):
             # Step 1: Fetch latest revisions
             url_revisions = f"{base_url}/api/v1/projects/{project_id}/revisions"
             async with session.get(url_revisions) as resp:
-                if resp.status != 200:
+                resp_json = await resp.json()
+
+                if resp.status == 401 and is_jwt_expired(resp_json):
+                    await refresh_and_update_cookies(base_url,cookies)
+                    return  
+
+                elif resp.status != 200:
                     logger.error(f"Fetch revisions failed: {resp.status}, Body: {await resp.text()}")
                     return
-                rev_data = await resp.json()
+
+                rev_data = resp_json
+
                 first = rev_data['revisions']['data'][0] if rev_data['revisions']['data'] else None
+
                 if not first:
                     logger.info("[Monitor] No revisions found")
                     return
+
                 logger.info(f"[Monitor] site.state = {first['site']['state']}")
+
                 if first['site']['state'] != 'done':
-                    logger.info("[Monitor] Site not yet ready. Retrying in 10s.")
+                    logger.info("[Monitor] Site not yet ready. Skipping execution.")
                     return
+
                 owner_id = first['project_revision']['created_by']['id']
 
             # Step 2: Fetch comments
             url_comments = f"{base_url}/api/v1/projects/{project_id}/comments"
+
             async with session.get(url_comments) as resp:
-                if resp.status != 200:
-                    logger.error(f"Fetch comments failed: {resp.status}, Body: {await resp.text()}")
+                resp_json = await resp.json()
+
+                if resp.status == 401 and is_jwt_expired(resp_json):
+                    await refresh_and_update_cookies(base_url,cookies)
+                    return  
+
+                elif resp.status != 200:
+                    logger.error(f"Fetch revisions failed: {resp.status}, Body: {await resp.text()}")
                     return
-                comm_data = await resp.json()
+
+                comm_data = resp_json
+
                 entry = comm_data['comments']['data'][0] if comm_data['comments']['data'] else None
+
                 if not entry:
                     logger.info("[Monitor] No comments to process")
                     return
+
                 comment = entry['comment']
                 comment_id = comment['id']
                 raw_content = comment['raw_content']
@@ -82,17 +100,26 @@ async def check_and_respond(project_id:str,config:dict):
             # Step 3: Check replies for existing auto response
             url_replies = f"{base_url}/api/v1/projects/{project_id}/comments/{comment_id}/replies"
             async with session.get(url_replies) as resp:
-                if resp.status != 200:
-                    logger.error(f"Fetch replies failed: {resp.status}, Body: {await resp.text()}")
+                resp_json = await resp.json()
+
+                if resp.status == 401 and is_jwt_expired(resp_json):
+                    await refresh_and_update_cookies(base_url,cookies)
+                    return  
+
+                elif resp.status != 200:
+                    logger.error(f"Fetch revisions failed: {resp.status}, Body: {await resp.text()}")
                     return
-                rep_data = await resp.json()
+
+                rep_data = resp_json
+
                 already_replied = any(
                     r['comment']['author']['id'] == owner_id and
                     loc_auto_response_prefix in r['comment']['raw_content']
                     for r in rep_data['comments']['data']
                 )
+
                 if already_replied:
-                    logger.info("[Monitor] Owner already replied automatically. Skipping.")
+                    logger.info("[Monitor] Found auto reply headers. Skipping.")
                     return
 
             # Step 4: Check if author has liked the project if required
@@ -100,11 +127,20 @@ async def check_and_respond(project_id:str,config:dict):
             if require_like_project:
                 url_likes = f"{base_url}/api/v1/users/{author['username']}/likes?first=100"
                 async with session.get(url_likes) as resp:
-                    if resp.status != 200:
-                        logger.error(f"Fetch likes failed: {resp.status}, Body: {await resp.text()}")
+                    resp_json = await resp.json()
+
+                    if resp.status == 401 and is_jwt_expired(resp_json):
+                        await refresh_and_update_cookies(base_url,cookies)
+                        return  
+
+                    elif resp.status != 200:
+                        logger.error(f"Fetch revisions failed: {resp.status}, Body: {await resp.text()}")
                         return
-                    like_data = await resp.json()
+
+                    like_data = resp_json
+
                     has_liked = any(l['project']['id'] == project_id for l in like_data['likes']['data'])
+
                     if not has_liked:
                         logger.info("[Monitor] Author has not liked the project. Sending reminder.")
                         await session.post(
