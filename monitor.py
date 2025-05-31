@@ -139,7 +139,15 @@ async def check_and_respond(project_id:str,config:dict):
 
                     like_data = resp_json
 
-                    has_liked = any(l['project']['id'] == project_id for l in like_data['likes']['data'])
+                    likes_list = []
+
+                    for l in like_data.get('likes',{}).get('data',[{}]):
+                        try:
+                            likes_list.append(l.get('project',{}).get('id','No ID'))#Some like items have broken projects
+                        except:
+                            continue
+
+                    has_liked = any(likes_list)
 
                     if not has_liked:
                         logger.info("[Monitor] Author has not liked the project. Sending reminder.")
